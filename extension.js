@@ -3,37 +3,68 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 export default class Extension {
     constructor() {
+        this._childAddedSignalId = 0;
     }
 
     enable() {
-        this._child_added_signal_id = Main.panel._rightBox.connect(
-            'child-added', this._child_added_event_handler
-        )
-        this._add_effects();
+        const rightBox = Main.panel?._rightBox;
+
+        if (!rightBox) {
+            console.error(
+                'Desaturated Tray Icons: Main.panel._rightBox is unavailable'
+            );
+            return;
+        }
+
+        this._childAddedSignalId = rightBox.connect(
+            'child-added',
+            (_box, child) => {
+                this._desaturateChild(child);
+            }
+        );
+
+        this._addEffects();
     }
 
     disable() {
-        Main.panel._rightBox.disconnect(this._child_added_signal_id);
-        this._remove_effects();
+        const rightBox = Main.panel?._rightBox;
+
+        if (rightBox && this._childAddedSignalId !== 0) {
+            rightBox.disconnect(this._childAddedSignalId);
+            this._childAddedSignalId = 0;
+        }
+
+        this._removeEffects();
     }
 
-    _child_added_event_handler(_, child) {
+    _desaturateChild(child) {
+        if (!child || !child.add_effect) {
+            return;
+        }
+
+        for (const effect of child.get_effects()) {
+            if (effect instanceof Clutter.DesaturateEffect) {
+                return;
+            }
+        }
+
         child.add_effect(new Clutter.DesaturateEffect());
     }
 
-    _get_tray() {
-        return Main.panel._rightBox.get_children();
+    _getTrayChildren() {
+        const rightBox = Main.panel?._rightBox;
+        return rightBox ? rightBox.get_children() : [];
     }
 
-    _add_effects() {
-        for (let child of this._get_tray()) {
-            child.add_effect(new Clutter.DesaturateEffect());
+    _addEffects() {
+        for (const child of this._getTrayChildren()) {
+            this._desaturateChild(child);
         }
     }
 
-    _remove_effects() {
-        for (let child of this._get_tray()) {
-            for (let effect of child.get_effects()) {
+    _removeEffects() {
+        for (const child of this._getTrayChildren()) {
+            for (const effect of child.get_effects()) {
                 if (effect instanceof Clutter.DesaturateEffect) {
                     child.remove_effect(effect);
                 }
